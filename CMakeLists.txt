@@ -154,8 +154,14 @@ if(WITH_SASL)
     set(WITH_SASL_OAUTHBEARER ON)
     list(APPEND BUILT_WITH "SASL_SCRAM SASL_OAUTHBEARER")
   endif()
-  if(NOT WIN32)
+  # Kapture patch: WITH_SASL_CYRUS controls Kerberos/GSSAPI via libsasl2.
+  # Allow the cmake invoker to disable it explicitly so we can ship a
+  # librdkafka with built-in SASL (PLAIN / SCRAM / OAUTHBEARER) and no
+  # external libsasl2 dependency.
+  if(NOT WIN32 AND NOT DEFINED WITH_SASL_CYRUS)
     set(WITH_SASL_CYRUS ON)
+  endif()
+  if(WITH_SASL_CYRUS)
     list(APPEND BUILT_WITH "SASL_CYRUS")
   endif()
 endif()
