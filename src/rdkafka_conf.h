@@ -195,8 +195,11 @@ typedef enum {
 } rd_kafka_metadata_recovery_strategy_t;
 
 /* Increase in steps of 64 as needed.
- * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 35)
+ * This must be larger than sizeof(rd_kafka_[topic_]conf_t).
+ *
+ * Bumped from 64*35 to 64*36 to make room for the Kapture proto hook
+ * fields (proto_hook_cb + proto_hook_opaque). */
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 36)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -542,6 +545,21 @@ struct rd_kafka_conf_s {
         int log_queue;
         int log_thread_name;
         int log_connection_close;
+
+        /* Kapture extension: protocol-frame hook.
+         * Fires once per finalized request (SEND) and once per matched
+         * response (RECV). Allows downstream tooling to surface every
+         * protocol exchange without parsing the text log stream. */
+        void (*proto_hook_cb)(rd_kafka_t *rk,
+                              int dir,
+                              int api_key,
+                              int api_version,
+                              int32_t corr_id,
+                              int32_t broker_id,
+                              size_t payload_size,
+                              double rtt_ms,
+                              void *opaque);
+        void *proto_hook_opaque;
 
         /* PRNG seeding */
         int enable_random_seed;

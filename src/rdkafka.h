@@ -2194,6 +2194,56 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
 
 
 /**
+ * @brief Direction of a protocol frame in `rd_kafka_proto_hook_cb_t`.
+ *        Kapture extension.
+ */
+#define RD_KAFKA_PROTO_DIR_SEND 0 /**< Outgoing request to broker. */
+#define RD_KAFKA_PROTO_DIR_RECV 1 /**< Incoming response from broker. */
+
+/**
+ * @brief Protocol-frame callback. Kapture extension.
+ *
+ * Fires once per finalized request (`dir == RD_KAFKA_PROTO_DIR_SEND`) and
+ * once per matched response (`dir == RD_KAFKA_PROTO_DIR_RECV`). The
+ * callback runs on the broker thread; it MUST NOT call into librdkafka
+ * APIs or block.
+ *
+ * @param rk            Kafka handle.
+ * @param dir           `RD_KAFKA_PROTO_DIR_SEND` or `..._RECV`.
+ * @param api_key       ApiKey of the request (e.g. 0=Produce, 1=Fetch).
+ * @param api_version   ApiVersion of the request.
+ * @param corr_id       Correlation id of the exchange (signed int32).
+ * @param broker_id     Broker node id (-1 for the internal broker).
+ * @param payload_size  Total request size on SEND, response size on RECV.
+ * @param rtt_ms        Round-trip time in milliseconds (RECV only;
+ *                      always 0.0 on SEND).
+ * @param opaque        Per-conf opaque passed to
+ *                      `rd_kafka_conf_set_proto_hook_cb`.
+ */
+typedef void (*rd_kafka_proto_hook_cb_t)(rd_kafka_t *rk,
+                                         int dir,
+                                         int api_key,
+                                         int api_version,
+                                         int32_t corr_id,
+                                         int32_t broker_id,
+                                         size_t payload_size,
+                                         double rtt_ms,
+                                         void *opaque);
+
+/**
+ * @brief Install a protocol-frame hook on the configuration. Kapture
+ *        extension. Pass NULL for `cb` to clear a previously-set hook.
+ *
+ * @remark The opaque is owned by the caller and must outlive the
+ *         `rd_kafka_t` instance built from this configuration.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_proto_hook_cb(rd_kafka_conf_t *conf,
+                                     rd_kafka_proto_hook_cb_t cb,
+                                     void *opaque);
+
+
+/**
  * @brief Set statistics callback in provided conf object.
  *
  * The statistics callback is triggered from rd_kafka_poll() every

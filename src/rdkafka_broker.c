@@ -2013,6 +2013,20 @@ static int rd_kafka_req_response(rd_kafka_broker_t *rkb,
                    rkbuf->rkbuf_reshdr.CorrId,
                    (float)req->rkbuf_ts_sent / 1000.0f);
 
+        /* Kapture extension: notify proto hook of the matched RECV. */
+        if (rkb->rkb_rk->rk_conf.proto_hook_cb) {
+                rkb->rkb_rk->rk_conf.proto_hook_cb(
+                    rkb->rkb_rk,
+                    RD_KAFKA_PROTO_DIR_RECV,
+                    (int)req->rkbuf_reqhdr.ApiKey,
+                    (int)req->rkbuf_reqhdr.ApiVersion,
+                    rkbuf->rkbuf_reshdr.CorrId,
+                    rkb->rkb_nodeid,
+                    rkbuf->rkbuf_totlen,
+                    (double)req->rkbuf_ts_sent / 1000.0,
+                    rkb->rkb_rk->rk_conf.proto_hook_opaque);
+        }
+
         /* Copy request's header and certain flags to response object's
          * reqhdr for convenience. */
         rkbuf->rkbuf_reqhdr = req->rkbuf_reqhdr;
@@ -2840,6 +2854,24 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
                         rd_kafka_buf_update_i32(rkbuf, 4 + 2 + 2,
                                                 rkbuf->rkbuf_corrid);
                         rkbuf->rkbuf_connid = rkb->rkb_connid;
+
+                        /* Kapture extension: notify proto hook now that the
+                         * CorrId has been assigned. We fire once per outgoing
+                         * request, before the bytes hit the socket. Partial
+                         * resends (corrid != 0 above) are intentionally NOT
+                         * re-emitted. */
+                        if (rkb->rkb_rk->rk_conf.proto_hook_cb) {
+                                rkb->rkb_rk->rk_conf.proto_hook_cb(
+                                    rkb->rkb_rk,
+                                    RD_KAFKA_PROTO_DIR_SEND,
+                                    (int)rkbuf->rkbuf_reqhdr.ApiKey,
+                                    (int)rkbuf->rkbuf_reqhdr.ApiVersion,
+                                    rkbuf->rkbuf_corrid,
+                                    rkb->rkb_nodeid,
+                                    rd_slice_size(&rkbuf->rkbuf_reader),
+                                    0.0,
+                                    rkb->rkb_rk->rk_conf.proto_hook_opaque);
+                        }
                 } else if (pre_of > RD_KAFKAP_REQHDR_SIZE) {
                         rd_kafka_assert(NULL,
                                         rkbuf->rkbuf_connid == rkb->rkb_connid);
