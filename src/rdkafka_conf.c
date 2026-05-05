@@ -3038,6 +3038,13 @@ void rd_kafka_conf_set_proto_hook_cb(rd_kafka_conf_t *conf,
         conf->proto_hook_opaque = opaque;
 }
 
+void rd_kafka_set_proto_hook_cb(rd_kafka_t *rk,
+                                rd_kafka_proto_hook_cb_t cb,
+                                void *opaque) {
+        rk->rk_conf.proto_hook_cb     = cb;
+        rk->rk_conf.proto_hook_opaque = opaque;
+}
+
 void rd_kafka_conf_set_oauthbearer_token_refresh_cb(
     rd_kafka_conf_t *conf,
     void (*oauthbearer_token_refresh_cb)(rd_kafka_t *rk,

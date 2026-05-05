@@ -2242,6 +2242,19 @@ void rd_kafka_conf_set_proto_hook_cb(rd_kafka_conf_t *conf,
                                      rd_kafka_proto_hook_cb_t cb,
                                      void *opaque);
 
+/**
+ * @brief Install a protocol-frame hook directly on a live `rd_kafka_t`.
+ *        Kapture extension. Useful for high-level Rust / Go bindings that
+ *        do not expose the underlying `rd_kafka_conf_t` before create.
+ *        Pass NULL for `cb` to clear the hook.
+ *
+ * @remark The opaque is owned by the caller and must outlive `rk`.
+ */
+RD_EXPORT
+void rd_kafka_set_proto_hook_cb(rd_kafka_t *rk,
+                                rd_kafka_proto_hook_cb_t cb,
+                                void *opaque);
+
 
 /**
  * @brief Set statistics callback in provided conf object.
