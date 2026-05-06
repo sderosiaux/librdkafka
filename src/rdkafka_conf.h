@@ -558,6 +558,8 @@ struct rd_kafka_conf_s {
                               int32_t broker_id,
                               size_t payload_size,
                               double rtt_ms,
+                              const void *payload_buf,
+                              size_t payload_buf_len,
                               void *opaque);
         void *proto_hook_opaque;
 

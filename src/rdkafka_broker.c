@@ -2013,8 +2013,24 @@ static int rd_kafka_req_response(rd_kafka_broker_t *rkb,
                    rkbuf->rkbuf_reshdr.CorrId,
                    (float)req->rkbuf_ts_sent / 1000.0f);
 
-        /* Kapture extension: notify proto hook of the matched RECV. */
+        /* Kapture extension: notify proto hook of the matched RECV.
+         * Flatten the response buffer into a heap-allocated prefix
+         * (capped at RD_KAFKA_PROTO_HOOK_PAYLOAD_MAX) so the callback
+         * can decode without walking rd_buf segments. The temp buffer
+         * is freed immediately after the hook returns. */
         if (rkb->rkb_rk->rk_conf.proto_hook_cb) {
+                size_t total_len = rd_slice_size(&rkbuf->rkbuf_reader);
+                size_t cap_len = RD_KAFKA_PROTO_HOOK_PAYLOAD_MAX;
+                size_t flat_len = total_len > cap_len ? cap_len : total_len;
+                void *flat = NULL;
+                if (flat_len > 0) {
+                        flat = rd_malloc(flat_len);
+                        if (flat) {
+                                rd_slice_t snap;
+                                rd_slice_init_full(&snap, &rkbuf->rkbuf_buf);
+                                rd_slice_read(&snap, flat, flat_len);
+                        }
+                }
                 rkb->rkb_rk->rk_conf.proto_hook_cb(
                     rkb->rkb_rk,
                     RD_KAFKA_PROTO_DIR_RECV,
@@ -2024,7 +2040,11 @@ static int rd_kafka_req_response(rd_kafka_broker_t *rkb,
                     rkb->rkb_nodeid,
                     rkbuf->rkbuf_totlen,
                     (double)req->rkbuf_ts_sent / 1000.0,
+                    flat,
+                    flat ? flat_len : 0,
                     rkb->rkb_rk->rk_conf.proto_hook_opaque);
+                if (flat)
+                        rd_free(flat);
         }
 
         /* Copy request's header and certain flags to response object's
@@ -2859,8 +2879,29 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
                          * CorrId has been assigned. We fire once per outgoing
                          * request, before the bytes hit the socket. Partial
                          * resends (corrid != 0 above) are intentionally NOT
-                         * re-emitted. */
+                         * re-emitted.
+                         *
+                         * Same flatten-into-temp pattern as the RECV side
+                         * above; capped to RD_KAFKA_PROTO_HOOK_PAYLOAD_MAX. */
                         if (rkb->rkb_rk->rk_conf.proto_hook_cb) {
+                                size_t total_len = rd_slice_size(
+                                    &rkbuf->rkbuf_reader);
+                                size_t cap_len =
+                                    RD_KAFKA_PROTO_HOOK_PAYLOAD_MAX;
+                                size_t flat_len = total_len > cap_len
+                                                      ? cap_len
+                                                      : total_len;
+                                void *flat = NULL;
+                                if (flat_len > 0) {
+                                        flat = rd_malloc(flat_len);
+                                        if (flat) {
+                                                rd_slice_t snap;
+                                                rd_slice_init_full(
+                                                    &snap, &rkbuf->rkbuf_buf);
+                                                rd_slice_read(&snap, flat,
+                                                              flat_len);
+                                        }
+                                }
                                 rkb->rkb_rk->rk_conf.proto_hook_cb(
                                     rkb->rkb_rk,
                                     RD_KAFKA_PROTO_DIR_SEND,
@@ -2868,9 +2909,13 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
                                     (int)rkbuf->rkbuf_reqhdr.ApiVersion,
                                     rkbuf->rkbuf_corrid,
                                     rkb->rkb_nodeid,
-                                    rd_slice_size(&rkbuf->rkbuf_reader),
+                                    total_len,
                                     0.0,
+                                    flat,
+                                    flat ? flat_len : 0,
                                     rkb->rkb_rk->rk_conf.proto_hook_opaque);
+                                if (flat)
+                                        rd_free(flat);
                         }
                 } else if (pre_of > RD_KAFKAP_REQHDR_SIZE) {
                         rd_kafka_assert(NULL,

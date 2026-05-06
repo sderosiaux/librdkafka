@@ -2201,6 +2201,14 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
 #define RD_KAFKA_PROTO_DIR_RECV 1 /**< Incoming response from broker. */
 
 /**
+ * @brief Maximum number of payload bytes the proto hook flattens and
+ *        passes to the callback per frame. Larger frames (typical of
+ *        Fetch responses) are truncated to this prefix; payload_size
+ *        still reflects the true wire size. Kapture extension.
+ */
+#define RD_KAFKA_PROTO_HOOK_PAYLOAD_MAX (64 * 1024)
+
+/**
  * @brief Protocol-frame callback. Kapture extension.
  *
  * Fires once per finalized request (`dir == RD_KAFKA_PROTO_DIR_SEND`) and
@@ -2208,17 +2216,27 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  * callback runs on the broker thread; it MUST NOT call into librdkafka
  * APIs or block.
  *
- * @param rk            Kafka handle.
- * @param dir           `RD_KAFKA_PROTO_DIR_SEND` or `..._RECV`.
- * @param api_key       ApiKey of the request (e.g. 0=Produce, 1=Fetch).
- * @param api_version   ApiVersion of the request.
- * @param corr_id       Correlation id of the exchange (signed int32).
- * @param broker_id     Broker node id (-1 for the internal broker).
- * @param payload_size  Total request size on SEND, response size on RECV.
- * @param rtt_ms        Round-trip time in milliseconds (RECV only;
- *                      always 0.0 on SEND).
- * @param opaque        Per-conf opaque passed to
- *                      `rd_kafka_conf_set_proto_hook_cb`.
+ * The full wire payload (request bytes on SEND, response bytes on RECV)
+ * is provided via `payload_buf` / `payload_buf_len`, capped to
+ * `RD_KAFKA_PROTO_HOOK_PAYLOAD_MAX`. The buffer pointer is only valid
+ * for the duration of the callback — copy out before returning.
+ *
+ * @param rk             Kafka handle.
+ * @param dir            `RD_KAFKA_PROTO_DIR_SEND` or `..._RECV`.
+ * @param api_key        ApiKey of the request (e.g. 0=Produce, 1=Fetch).
+ * @param api_version    ApiVersion of the request.
+ * @param corr_id        Correlation id of the exchange (signed int32).
+ * @param broker_id      Broker node id (-1 for the internal broker).
+ * @param payload_size   True wire size — request size on SEND,
+ *                       response size on RECV.
+ * @param rtt_ms         Round-trip time in milliseconds (RECV only;
+ *                       always 0.0 on SEND).
+ * @param payload_buf    Pointer to flattened wire bytes. NULL if
+ *                       payload_size==0 or capture failed.
+ * @param payload_buf_len Bytes in payload_buf (≤ payload_size, capped to
+ *                       RD_KAFKA_PROTO_HOOK_PAYLOAD_MAX).
+ * @param opaque         Per-conf opaque passed to
+ *                       `rd_kafka_conf_set_proto_hook_cb`.
  */
 typedef void (*rd_kafka_proto_hook_cb_t)(rd_kafka_t *rk,
                                          int dir,
@@ -2228,6 +2246,8 @@ typedef void (*rd_kafka_proto_hook_cb_t)(rd_kafka_t *rk,
                                          int32_t broker_id,
                                          size_t payload_size,
                                          double rtt_ms,
+                                         const void *payload_buf,
+                                         size_t payload_buf_len,
                                          void *opaque);
 
 /**
